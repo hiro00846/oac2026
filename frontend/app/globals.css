@@ -1,0 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* video.js styles */
+@import 'video.js/dist/video-js.css';
+
