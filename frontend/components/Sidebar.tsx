@@ -21,7 +21,7 @@ export default function Sidebar({ snapshots, onDelete }: SidebarProps) {
   }
 
   return (
-    <aside className="w-80 bg-gray-100 border-l border-gray-300 overflow-y-auto">
+    <aside className="w-96 bg-gray-100 border-l border-gray-300 overflow-y-auto h-full">
       <div className="p-4">
         <h2 className="text-xl font-bold mb-4">スナップショット一覧</h2>
         {snapshots.length === 0 ? (

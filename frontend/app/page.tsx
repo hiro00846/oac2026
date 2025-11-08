@@ -13,6 +13,11 @@ export default function Home() {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
 
   const handleVideoLoad = (url: string, id: string, sourceType: VideoSourceType) => {
+    // 古いBlob URLをクリーンアップ
+    if (videoUrl && videoUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(videoUrl)
+    }
+    
     setVideoUrl(url)
     setVideoId(id)
     setVideoSourceType(sourceType)
@@ -64,10 +69,10 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen overflow-hidden">
       <Header onVideoLoad={handleVideoLoad} />
       <div className="flex flex-1 overflow-hidden">
-        <main className="flex-1 p-4 overflow-auto">
+        <main className="flex-1 p-4 overflow-hidden flex flex-col">
           <VideoPlayer
             videoUrl={videoUrl}
             videoId={videoId}

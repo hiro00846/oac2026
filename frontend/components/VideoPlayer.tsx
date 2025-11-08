@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
 import { Snapshot, VideoSourceType } from "@/types";
@@ -21,13 +21,16 @@ export default function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [currentTime, setCurrentTime] = useState<string>("00:00:00");
 
   useEffect(() => {
     if (!videoRef.current || !videoUrl) return;
 
-    // video要素にcrossOrigin属性を設定
-    if (videoRef.current) {
+    // Blob URLの場合はcrossOriginは不要、通常のURLの場合は設定
+    if (videoRef.current && !videoUrl.startsWith("blob:")) {
       videoRef.current.crossOrigin = "anonymous";
+    } else if (videoRef.current && videoUrl.startsWith("blob:")) {
+      videoRef.current.crossOrigin = null;
     }
 
     // video.jsプレイヤーを初期化
@@ -35,19 +38,40 @@ export default function VideoPlayer({
       playerRef.current = videojs(videoRef.current, {
         controls: true,
         responsive: true,
-        fluid: true,
-        crossorigin: "anonymous",
+        fluid: false,
+        aspectRatio: "16:9",
+        crossorigin: videoUrl.startsWith("blob:") ? undefined : "anonymous",
+        userActions: {
+          hotkeys: false,
+          doubleClick: false,
+        },
+      });
+
+      // タイムコード更新のイベントリスナー
+      playerRef.current.on("timeupdate", () => {
+        const time = playerRef.current?.currentTime() || 0;
+        setCurrentTime(formatTime(time));
       });
     } else {
       // 既存のプレイヤーのsrcを更新
       playerRef.current.src({ type: "video/mp4", src: videoUrl });
       // crossOriginも更新
       if (videoRef.current) {
-        videoRef.current.crossOrigin = "anonymous";
+        if (videoUrl.startsWith("blob:")) {
+          videoRef.current.crossOrigin = null;
+        } else {
+          videoRef.current.crossOrigin = "anonymous";
+        }
       }
+      // タイムコード更新のイベントリスナーを再設定
+      playerRef.current.off("timeupdate");
+      playerRef.current.on("timeupdate", () => {
+        const time = playerRef.current?.currentTime() || 0;
+        setCurrentTime(formatTime(time));
+      });
     }
 
-    // クリーンアップ
+    // クリーンアップ（コンポーネントのアンマウント時のみ）
     return () => {
       if (playerRef.current) {
         playerRef.current.dispose();
@@ -153,10 +177,14 @@ export default function VideoPlayer({
   // YouTubeの場合はiframeで表示（スナップショット機能は利用不可）
   if (videoSourceType === "youtube") {
     return (
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col max-h-full">
         <div
-          className="flex-1 bg-black rounded-lg overflow-hidden mb-4 relative"
-          style={{ paddingBottom: "56.25%" }}
+          className="flex-shrink-0 rounded-lg mb-4 relative"
+          style={{
+            maxHeight: "calc(100vh - 200px)",
+            paddingBottom: "56.25%",
+            width: "100%",
+          }}
         >
           <iframe
             src={videoUrl}
@@ -166,7 +194,7 @@ export default function VideoPlayer({
             title="YouTube video player"
           />
         </div>
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-2 flex-shrink-0">
           <button
             disabled
             className="px-8 py-3 bg-gray-400 text-white font-bold rounded-lg shadow-lg cursor-not-allowed"
@@ -182,25 +210,60 @@ export default function VideoPlayer({
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-1 bg-black rounded-lg overflow-hidden mb-4">
-        <video
-          ref={videoRef}
-          className="video-js vjs-big-play-centered"
-          playsInline
-          crossOrigin="anonymous"
+    <div className="h-full flex flex-col max-h-full">
+      <div
+        className="flex-shrink-0 rounded-lg mb-4 flex flex-col items-center justify-center p-2"
+        style={{ maxHeight: "calc(100vh - 250px)" }}
+      >
+        {/* タイムコードとスナップボタン */}
+        <div
+          className="flex items-center gap-2 mb-2 w-full"
+          style={{ maxWidth: "85%" }}
         >
-          <source src={videoUrl} type="video/mp4" />
-        </video>
-      </div>
-      <div className="flex justify-center">
-        <button
-          onClick={handleSnap}
-          className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-lg transition-colors"
-          disabled={!videoId}
+          <div className="px-4 py-2 bg-gray-800 text-white text-sm font-mono rounded">
+            {currentTime}
+          </div>
+          <button
+            onClick={handleSnap}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded shadow-lg transition-colors flex items-center gap-2"
+            disabled={!videoId}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+            <span>Snap</span>
+          </button>
+        </div>
+        <div
+          className="w-full"
+          style={{
+            maxWidth: "85%",
+            maxHeight: "calc(100vh - 300px)",
+            aspectRatio: "16/9",
+            position: "relative",
+          }}
         >
-          Snap
-        </button>
+          <video
+            ref={videoRef}
+            className="video-js vjs-big-play-centered"
+            playsInline
+            crossOrigin={videoUrl.startsWith("blob:") ? undefined : "anonymous"}
+            data-setup="{}"
+            onDoubleClick={(e) => e.preventDefault()}
+          >
+            <source src={videoUrl} type="video/mp4" />
+          </video>
+        </div>
       </div>
       <canvas ref={canvasRef} className="hidden" />
     </div>

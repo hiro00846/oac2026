@@ -5,3 +5,16 @@
 /* video.js styles */
 @import 'video.js/dist/video-js.css';
 
+/* video.js カスタムスタイル - 16:9で全体表示 */
+.video-js {
+  width: 100% !important;
+  height: 100% !important;
+  position: relative !important;
+}
+
+.video-js video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+

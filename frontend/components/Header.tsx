@@ -12,34 +12,17 @@ export default function Header({ onVideoLoad }: HeaderProps) {
   const [videoUrl, setVideoUrl] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    setIsLoading(true)
-    const formData = new FormData()
-    formData.append('file', file)
-
-    try {
-      const response = await fetch('http://localhost:3001/api/upload-video', {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const videoUrl = `http://localhost:3001${data.url}`
-        onVideoLoad(videoUrl, data.videoId, 'file')
-        setVideoUrl('')
-      } else {
-        alert('動画のアップロードに失敗しました')
-      }
-    } catch (error) {
-      console.error('Upload error:', error)
-      alert('動画のアップロードに失敗しました')
-    } finally {
-      setIsLoading(false)
-    }
+    // サーバーにアップロードせず、直接Blob URLを作成して再生
+    const blobUrl = URL.createObjectURL(file)
+    const videoId = `file-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`
+    onVideoLoad(blobUrl, videoId, 'file')
+    
+    // 入力フィールドをリセット
+    e.target.value = ''
   }
 
   const handleUrlSubmit = async (e: React.FormEvent) => {
@@ -75,7 +58,7 @@ export default function Header({ onVideoLoad }: HeaderProps) {
       <div className="container mx-auto flex items-center justify-between">
         <h1 className="text-2xl font-bold">Video Snapshot App</h1>
         <div className="flex items-center gap-4">
-          <form onSubmit={handleUrlSubmit} className="flex items-center gap-2">
+          <form onSubmit={handleUrlSubmit} className="flex items-center gap-2 hidden">
             <input
               type="text"
               value={videoUrl}
