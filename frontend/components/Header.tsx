@@ -5,7 +5,7 @@ import { isYouTubeUrl, extractYouTubeVideoId, getYouTubeEmbedUrl } from '@/lib/y
 import { VideoSourceType } from '@/types'
 
 interface HeaderProps {
-  onVideoLoad: (url: string, videoId: string, sourceType: VideoSourceType) => void
+  onVideoLoad: (url: string, videoId: string, sourceType: VideoSourceType, fileName?: string) => void
 }
 
 export default function Header({ onVideoLoad }: HeaderProps) {
@@ -19,7 +19,7 @@ export default function Header({ onVideoLoad }: HeaderProps) {
     // サーバーにアップロードせず、直接Blob URLを作成して再生
     const blobUrl = URL.createObjectURL(file)
     const videoId = `file-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`
-    onVideoLoad(blobUrl, videoId, 'file')
+    onVideoLoad(blobUrl, videoId, 'file', file.name)
     
     // 入力フィールドをリセット
     e.target.value = ''
@@ -36,13 +36,13 @@ export default function Header({ onVideoLoad }: HeaderProps) {
         const youtubeVideoId = extractYouTubeVideoId(videoUrl)
         if (youtubeVideoId) {
           const embedUrl = getYouTubeEmbedUrl(youtubeVideoId)
-          onVideoLoad(embedUrl, `youtube-${youtubeVideoId}`, 'youtube')
+          onVideoLoad(embedUrl, `youtube-${youtubeVideoId}`, 'youtube', undefined)
         } else {
           alert('YouTube URLが無効です')
         }
       } else {
         // 通常のURLの場合は直接使用
-        onVideoLoad(videoUrl, `url-${Date.now()}`, 'url')
+        onVideoLoad(videoUrl, `url-${Date.now()}`, 'url', undefined)
       }
       setVideoUrl('')
     } catch (error) {

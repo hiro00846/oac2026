@@ -12,8 +12,9 @@ export default function Home() {
   const [videoSourceType, setVideoSourceType] = useState<VideoSourceType>('file')
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
   const [seekTo, setSeekTo] = useState<number | null>(null)
+  const [videoFileName, setVideoFileName] = useState<string>('')
 
-  const handleVideoLoad = (url: string, id: string, sourceType: VideoSourceType) => {
+  const handleVideoLoad = (url: string, id: string, sourceType: VideoSourceType, fileName?: string) => {
     // 古いBlob URLをクリーンアップ
     if (videoUrl && videoUrl.startsWith('blob:')) {
       URL.revokeObjectURL(videoUrl)
@@ -22,6 +23,7 @@ export default function Home() {
     setVideoUrl(url)
     setVideoId(id)
     setVideoSourceType(sourceType)
+    setVideoFileName(fileName || '')
     // 既存のスナップショットを読み込む（YouTubeの場合はスキップ）
     if (sourceType !== 'youtube') {
       loadSnapshots(id)
@@ -133,6 +135,7 @@ export default function Home() {
           snapshots={snapshots}
           onDelete={handleDeleteSnapshot}
           onTimeClick={handleTimeClick}
+          videoFileName={videoFileName}
         />
       </div>
     </div>

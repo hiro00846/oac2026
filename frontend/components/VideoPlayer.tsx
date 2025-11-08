@@ -123,13 +123,16 @@ export default function VideoPlayer({
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    // Canvasに現在のフレームを描画
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Canvasに現在のフレームを描画（1440x810pxにリサイズ）
+    const targetWidth = 1440;
+    const targetHeight = 810;
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // アスペクト比を維持してリサイズ
+    ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
 
     // Blobを生成
     canvas.toBlob(

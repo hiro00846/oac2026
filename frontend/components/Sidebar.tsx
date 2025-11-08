@@ -7,12 +7,14 @@ interface SidebarProps {
   snapshots: Snapshot[]
   onDelete: (snapshotId: string) => void
   onTimeClick: (time: string) => void
+  videoFileName?: string
 }
 
 type SortOrder = 'asc' | 'desc'
 
-export default function Sidebar({ snapshots, onDelete, onTimeClick }: SidebarProps) {
+export default function Sidebar({ snapshots, onDelete, onTimeClick, videoFileName }: SidebarProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+  const [selectedSnapshots, setSelectedSnapshots] = useState<Set<string>>(new Set())
 
   // タイムスタンプを秒数に変換（HH:MM:SS.S形式に対応）
   const timeToSeconds = (time: string): number => {
@@ -39,12 +41,59 @@ export default function Sidebar({ snapshots, onDelete, onTimeClick }: SidebarPro
     const url = snapshot.blobUrl || snapshot.url
     if (!url) return
 
+    // ファイル名を生成（拡張子なしの動画ファイル名＋タイムスタンプ）
+    let fileName = 'snapshot'
+    if (videoFileName) {
+      // 拡張子を除いたファイル名を取得
+      const nameWithoutExt = videoFileName.replace(/\.[^/.]+$/, '')
+      fileName = nameWithoutExt
+    }
+    const timeString = snapshot.time.replace(/:/g, '-').replace(/\./g, '-')
+    const downloadFileName = `${fileName}_${timeString}.jpg`
+
     const link = document.createElement('a')
     link.href = url
-    link.download = `snapshot_${snapshot.time.replace(/:/g, '-')}.jpg`
+    link.download = downloadFileName
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+  }
+
+  const handleToggleSelect = (snapshotId: string) => {
+    setSelectedSnapshots((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(snapshotId)) {
+        newSet.delete(snapshotId)
+      } else {
+        newSet.add(snapshotId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = () => {
+    if (selectedSnapshots.size === sortedSnapshots.length) {
+      setSelectedSnapshots(new Set())
+    } else {
+      setSelectedSnapshots(new Set(sortedSnapshots.map((s) => s.snapshotId)))
+    }
+  }
+
+  const handleBulkDownload = async () => {
+    if (selectedSnapshots.size === 0) return
+
+    const selected = sortedSnapshots.filter((s) => selectedSnapshots.has(s.snapshotId))
+    
+    // 1枚ずつダウンロード（少し遅延を入れて連続ダウンロードを防ぐ）
+    for (let i = 0; i < selected.length; i++) {
+      const snapshot = selected[i]
+      await new Promise((resolve) => {
+        setTimeout(() => {
+          handleDownload(snapshot)
+          resolve(undefined)
+        }, i * 100) // 100ms間隔でダウンロード
+      })
+    }
   }
 
   return (
@@ -77,6 +126,24 @@ export default function Sidebar({ snapshots, onDelete, onTimeClick }: SidebarPro
             </div>
           )}
         </div>
+        {sortedSnapshots.length > 0 && (
+          <div className="mb-4 flex items-center gap-2">
+            <button
+              onClick={handleSelectAll}
+              className="px-3 py-1 text-xs bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors"
+            >
+              {selectedSnapshots.size === sortedSnapshots.length ? 'すべて解除' : 'すべて選択'}
+            </button>
+            {selectedSnapshots.size > 0 && (
+              <button
+                onClick={handleBulkDownload}
+                className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+              >
+                一括ダウンロード ({selectedSnapshots.size})
+              </button>
+            )}
+          </div>
+        )}
         {sortedSnapshots.length === 0 ? (
           <p className="text-gray-500 text-center py-8">スナップショットがありません</p>
         ) : (
@@ -86,8 +153,16 @@ export default function Sidebar({ snapshots, onDelete, onTimeClick }: SidebarPro
               return (
                 <div
                   key={snapshot.snapshotId}
-                  className="bg-white rounded-lg shadow-md p-3 border border-gray-200"
+                  className="bg-white rounded-lg shadow-md p-3 border border-gray-200 relative"
                 >
+                  <div className="absolute top-2 left-2 z-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedSnapshots.has(snapshot.snapshotId)}
+                      onChange={() => handleToggleSelect(snapshot.snapshotId)}
+                      className="w-5 h-5 cursor-pointer bg-white bg-opacity-70 border-2 border-gray-400 rounded"
+                    />
+                  </div>
                   <div className="relative w-full aspect-video mb-2 bg-gray-200 rounded overflow-hidden">
                     {imageUrl && (
                       <img
