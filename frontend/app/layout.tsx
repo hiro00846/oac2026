@@ -1,5 +1,8 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { MenuProvider } from '@/components/NavigationMenu'
+import NavigationMenu from '@/components/NavigationMenu'
+import ContentWrapper from '@/components/ContentWrapper'
 
 export const metadata: Metadata = {
   title: 'Video Snapshot App',
@@ -13,7 +16,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body>
+        <MenuProvider>
+          <NavigationMenu />
+          <ContentWrapper>{children}</ContentWrapper>
+        </MenuProvider>
+      </body>
     </html>
   )
 }
