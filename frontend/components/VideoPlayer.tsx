@@ -10,6 +10,9 @@ interface VideoPlayerProps {
   videoId: string | null;
   videoSourceType: VideoSourceType;
   onSnapshot: (snapshot: Snapshot) => void;
+  existingTimes?: string[];
+  seekTo?: number | null;
+  onSeekComplete?: () => void;
 }
 
 export default function VideoPlayer({
@@ -17,6 +20,9 @@ export default function VideoPlayer({
   videoId,
   videoSourceType,
   onSnapshot,
+  existingTimes = [],
+  seekTo,
+  onSeekComplete,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
@@ -44,6 +50,9 @@ export default function VideoPlayer({
         userActions: {
           hotkeys: false,
           doubleClick: false,
+        },
+        pictureInPicture: {
+          ui: false,
         },
       });
 
@@ -80,14 +89,25 @@ export default function VideoPlayer({
     };
   }, [videoUrl]);
 
+  // seekToが変更されたら動画の再生位置を変更
+  useEffect(() => {
+    if (seekTo !== null && seekTo !== undefined && playerRef.current) {
+      playerRef.current.currentTime(seekTo);
+      if (onSeekComplete) {
+        onSeekComplete();
+      }
+    }
+  }, [seekTo, onSeekComplete]);
+
   const formatTime = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
+    const dec = Math.floor((seconds % 1) * 10); // 0.1秒単位
     return `${String(h).padStart(2, "0")}:${String(m).padStart(
       2,
       "0"
-    )}:${String(s).padStart(2, "0")}`;
+    )}:${String(s).padStart(2, "0")}.${dec}`;
   };
 
   const handleSnap = async () => {
@@ -118,6 +138,35 @@ export default function VideoPlayer({
 
         const currentTime = player.currentTime() || 0;
         const timeString = formatTime(currentTime);
+
+        // タイムスタンプを秒数に変換（HH:MM:SS.S形式に対応）
+        const timeToSeconds = (time: string): number => {
+          const parts = time.split(":");
+          if (parts.length === 3) {
+            const secondsPart = parts[2].split(".");
+            const s = Number(secondsPart[0]) || 0;
+            const dec = Number(secondsPart[1]) || 0;
+            return (
+              (Number(parts[0]) || 0) * 3600 +
+              (Number(parts[1]) || 0) * 60 +
+              s +
+              dec / 10
+            );
+          }
+          return 0;
+        };
+
+        // 0.3秒以内のスナップショットが既に存在するかチェック
+        const currentSeconds = currentTime;
+        const hasNearTime = existingTimes.some((existingTime) => {
+          const existingSeconds = timeToSeconds(existingTime);
+          return Math.abs(currentSeconds - existingSeconds) <= 0.3;
+        });
+
+        if (hasNearTime) {
+          alert(`0.3秒以内（${timeString}）のスナップショットは既に存在します`);
+          return;
+        }
 
         // Blob URLを作成して即時表示
         const blobUrl = URL.createObjectURL(blob);

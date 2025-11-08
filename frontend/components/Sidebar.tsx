@@ -1,13 +1,40 @@
 'use client'
 
+import { useState, useMemo } from 'react'
 import { Snapshot } from '@/types'
 
 interface SidebarProps {
   snapshots: Snapshot[]
   onDelete: (snapshotId: string) => void
+  onTimeClick: (time: string) => void
 }
 
-export default function Sidebar({ snapshots, onDelete }: SidebarProps) {
+type SortOrder = 'asc' | 'desc'
+
+export default function Sidebar({ snapshots, onDelete, onTimeClick }: SidebarProps) {
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+
+  // タイムスタンプを秒数に変換（HH:MM:SS.S形式に対応）
+  const timeToSeconds = (time: string): number => {
+    const parts = time.split(':')
+    if (parts.length === 3) {
+      const secondsPart = parts[2].split('.')
+      const s = Number(secondsPart[0]) || 0
+      const dec = Number(secondsPart[1]) || 0
+      return (Number(parts[0]) || 0) * 3600 + (Number(parts[1]) || 0) * 60 + s + dec / 10
+    }
+    return 0
+  }
+
+  // ソートされたスナップショット
+  const sortedSnapshots = useMemo(() => {
+    const sorted = [...snapshots].sort((a, b) => {
+      const timeA = timeToSeconds(a.time)
+      const timeB = timeToSeconds(b.time)
+      return sortOrder === 'asc' ? timeA - timeB : timeB - timeA
+    })
+    return sorted
+  }, [snapshots, sortOrder])
   const handleDownload = (snapshot: Snapshot) => {
     const url = snapshot.blobUrl || snapshot.url
     if (!url) return
@@ -23,12 +50,38 @@ export default function Sidebar({ snapshots, onDelete }: SidebarProps) {
   return (
     <aside className="w-96 bg-gray-100 border-l border-gray-300 overflow-y-auto h-full">
       <div className="p-4">
-        <h2 className="text-xl font-bold mb-4">スナップショット一覧</h2>
-        {snapshots.length === 0 ? (
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">スナップショット一覧</h2>
+          {sortedSnapshots.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSortOrder('desc')}
+                className={`px-3 py-1 text-xs rounded transition-colors ${
+                  sortOrder === 'desc'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                }`}
+              >
+                降順
+              </button>
+              <button
+                onClick={() => setSortOrder('asc')}
+                className={`px-3 py-1 text-xs rounded transition-colors ${
+                  sortOrder === 'asc'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                }`}
+              >
+                昇順
+              </button>
+            </div>
+          )}
+        </div>
+        {sortedSnapshots.length === 0 ? (
           <p className="text-gray-500 text-center py-8">スナップショットがありません</p>
         ) : (
           <div className="space-y-4">
-            {snapshots.map((snapshot) => {
+            {sortedSnapshots.map((snapshot) => {
               const imageUrl = snapshot.blobUrl || snapshot.url
               return (
                 <div
@@ -45,7 +98,13 @@ export default function Sidebar({ snapshots, onDelete }: SidebarProps) {
                     )}
                   </div>
                   <div className="text-sm text-gray-600 mb-2">
-                    タイムスタンプ: {snapshot.time}
+                    タイムスタンプ:{' '}
+                    <button
+                      onClick={() => onTimeClick(snapshot.time)}
+                      className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-mono"
+                    >
+                      {snapshot.time}
+                    </button>
                   </div>
                   <div className="flex gap-2">
                     <button

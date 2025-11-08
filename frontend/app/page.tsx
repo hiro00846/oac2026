@@ -11,6 +11,7 @@ export default function Home() {
   const [videoId, setVideoId] = useState<string | null>(null)
   const [videoSourceType, setVideoSourceType] = useState<VideoSourceType>('file')
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+  const [seekTo, setSeekTo] = useState<number | null>(null)
 
   const handleVideoLoad = (url: string, id: string, sourceType: VideoSourceType) => {
     // 古いBlob URLをクリーンアップ
@@ -40,6 +41,32 @@ export default function Home() {
   }
 
   const handleSnapshot = async (snapshot: Snapshot) => {
+    // タイムスタンプを秒数に変換（HH:MM:SS.S形式に対応）
+    const timeToSeconds = (time: string): number => {
+      const parts = time.split(':')
+      if (parts.length === 3) {
+        const secondsPart = parts[2].split('.')
+        const s = Number(secondsPart[0]) || 0
+        const dec = Number(secondsPart[1]) || 0
+        return (Number(parts[0]) || 0) * 3600 + (Number(parts[1]) || 0) * 60 + s + dec / 10
+      }
+      return 0
+    }
+
+    // 0.3秒以内のスナップショットが既に存在するかチェック
+    const snapshotSeconds = timeToSeconds(snapshot.time)
+    const hasNearTime = snapshots.some((s) => {
+      if (s.snapshotId.startsWith('temp-')) return false
+      const existingSeconds = timeToSeconds(s.time)
+      return Math.abs(snapshotSeconds - existingSeconds) <= 0.3
+    })
+
+    if (hasNearTime) {
+      // 0.3秒以内のスナップショットが既に存在する場合は追加しない
+      console.log(`0.3秒以内（${snapshot.time}）のスナップショットは既に存在します`)
+      return
+    }
+
     // 一時的なスナップショットの場合は置き換え、そうでなければ追加
     if (snapshot.snapshotId.startsWith('temp-')) {
       setSnapshots((prev) => {
@@ -68,6 +95,23 @@ export default function Home() {
     }
   }
 
+  const handleTimeClick = (time: string) => {
+    // タイムスタンプを秒数に変換（HH:MM:SS.S形式に対応）
+    const timeToSeconds = (time: string): number => {
+      const parts = time.split(':')
+      if (parts.length === 3) {
+        const secondsPart = parts[2].split('.')
+        const s = Number(secondsPart[0]) || 0
+        const dec = Number(secondsPart[1]) || 0
+        return (Number(parts[0]) || 0) * 3600 + (Number(parts[1]) || 0) * 60 + s + dec / 10
+      }
+      return 0
+    }
+
+    const seconds = timeToSeconds(time)
+    setSeekTo(seconds)
+  }
+
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       <Header onVideoLoad={handleVideoLoad} />
@@ -78,11 +122,17 @@ export default function Home() {
             videoId={videoId}
             videoSourceType={videoSourceType}
             onSnapshot={handleSnapshot}
+            existingTimes={snapshots
+              .filter((s) => !s.snapshotId.startsWith('temp-'))
+              .map((s) => s.time)}
+            seekTo={seekTo}
+            onSeekComplete={() => setSeekTo(null)}
           />
         </main>
         <Sidebar
           snapshots={snapshots}
           onDelete={handleDeleteSnapshot}
+          onTimeClick={handleTimeClick}
         />
       </div>
     </div>

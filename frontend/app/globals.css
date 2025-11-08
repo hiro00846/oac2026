@@ -18,3 +18,13 @@
   object-fit: contain !important;
 }
 
+/* ピクチャーインピクチャーボタンを非表示 */
+.video-js .vjs-picture-in-picture-control {
+  display: none !important;
+}
+
+/* 最大化ボタンを非表示 */
+.video-js .vjs-fullscreen-control {
+  display: none !important;
+}
+
