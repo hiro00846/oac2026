@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { Snapshot } from '@/types'
+import CropModal from './CropModal'
 
 interface SidebarProps {
   snapshots: Snapshot[]
@@ -15,6 +16,9 @@ type SortOrder = 'asc' | 'desc'
 export default function Sidebar({ snapshots, onDelete, onTimeClick, videoFileName }: SidebarProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [selectedSnapshots, setSelectedSnapshots] = useState<Set<string>>(new Set())
+  const [cropModalOpen, setCropModalOpen] = useState(false)
+  const [cropImageUrl, setCropImageUrl] = useState<string>('')
+  const [cropTime, setCropTime] = useState<string>('')
 
   // タイムスタンプを秒数に変換（HH:MM:SS.S形式に対応）
   const timeToSeconds = (time: string): number => {
@@ -94,6 +98,36 @@ export default function Sidebar({ snapshots, onDelete, onTimeClick, videoFileNam
         }, i * 100) // 100ms間隔でダウンロード
       })
     }
+  }
+
+  const handleCrop = (snapshot: Snapshot) => {
+    const url = snapshot.blobUrl || snapshot.url
+    if (!url) return
+    setCropImageUrl(url)
+    setCropTime(snapshot.time)
+    setCropModalOpen(true)
+  }
+
+  const handleCropDownload = (croppedImageBlob: Blob) => {
+    // ファイル名を生成（拡張子なしの動画ファイル名＋タイムスタンプ＋_crop）
+    let fileName = 'snapshot'
+    if (videoFileName) {
+      const nameWithoutExt = videoFileName.replace(/\.[^/.]+$/, '')
+      fileName = nameWithoutExt
+    }
+    const timeString = cropTime.replace(/:/g, '-').replace(/\./g, '-')
+    const downloadFileName = `${fileName}_${timeString}_crop.jpg`
+
+    const url = URL.createObjectURL(croppedImageBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = downloadFileName
+    // 強制ダウンロードのため、target属性を設定
+    link.setAttribute('download', downloadFileName)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -189,6 +223,12 @@ export default function Sidebar({ snapshots, onDelete, onTimeClick, videoFileNam
                       ダウンロード
                     </button>
                     <button
+                      onClick={() => handleCrop(snapshot)}
+                      className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors"
+                    >
+                      クロップ
+                    </button>
+                    <button
                       onClick={() => onDelete(snapshot.snapshotId)}
                       className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
                     >
@@ -201,6 +241,14 @@ export default function Sidebar({ snapshots, onDelete, onTimeClick, videoFileNam
           </div>
         )}
       </div>
+      <CropModal
+        isOpen={cropModalOpen}
+        imageUrl={cropImageUrl}
+        onClose={() => setCropModalOpen(false)}
+        onDownload={handleCropDownload}
+        videoFileName={videoFileName}
+        time={cropTime}
+      />
     </aside>
   )
 }
