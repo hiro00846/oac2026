@@ -32,6 +32,12 @@ export default function VideoPlayer({
   useEffect(() => {
     if (!videoRef.current || !videoUrl) return;
 
+    // 既存のプレイヤーがある場合は破棄
+    if (playerRef.current) {
+      playerRef.current.dispose();
+      playerRef.current = null;
+    }
+
     // Blob URLの場合はcrossOriginは不要、通常のURLの場合は設定
     if (videoRef.current && !videoUrl.startsWith("blob:")) {
       videoRef.current.crossOrigin = "anonymous";
@@ -40,47 +46,33 @@ export default function VideoPlayer({
     }
 
     // video.jsプレイヤーを初期化
-    if (!playerRef.current) {
-      playerRef.current = videojs(videoRef.current, {
-        controls: true,
-        responsive: true,
-        fluid: false,
-        aspectRatio: "16:9",
-        crossorigin: videoUrl.startsWith("blob:") ? undefined : "anonymous",
-        userActions: {
-          hotkeys: false,
-          doubleClick: false,
+    playerRef.current = videojs(videoRef.current, {
+      controls: true,
+      responsive: true,
+      fluid: false,
+      aspectRatio: "16:9",
+      crossorigin: videoUrl.startsWith("blob:") ? undefined : "anonymous",
+      userActions: {
+        hotkeys: false,
+        doubleClick: false,
+      },
+      pictureInPicture: {
+        ui: false,
+      },
+      sources: [
+        {
+          src: videoUrl,
         },
-        pictureInPicture: {
-          ui: false,
-        },
-      });
+      ],
+    });
 
-      // タイムコード更新のイベントリスナー
-      playerRef.current.on("timeupdate", () => {
-        const time = playerRef.current?.currentTime() || 0;
-        setCurrentTime(formatTime(time));
-      });
-    } else {
-      // 既存のプレイヤーのsrcを更新
-      playerRef.current.src({ type: "video/mp4", src: videoUrl });
-      // crossOriginも更新
-      if (videoRef.current) {
-        if (videoUrl.startsWith("blob:")) {
-          videoRef.current.crossOrigin = null;
-        } else {
-          videoRef.current.crossOrigin = "anonymous";
-        }
-      }
-      // タイムコード更新のイベントリスナーを再設定
-      playerRef.current.off("timeupdate");
-      playerRef.current.on("timeupdate", () => {
-        const time = playerRef.current?.currentTime() || 0;
-        setCurrentTime(formatTime(time));
-      });
-    }
+    // タイムコード更新のイベントリスナー
+    playerRef.current.on("timeupdate", () => {
+      const time = playerRef.current?.currentTime() || 0;
+      setCurrentTime(formatTime(time));
+    });
 
-    // クリーンアップ（コンポーネントのアンマウント時のみ）
+    // クリーンアップ
     return () => {
       if (playerRef.current) {
         playerRef.current.dispose();
@@ -310,11 +302,9 @@ export default function VideoPlayer({
             className="video-js vjs-big-play-centered"
             playsInline
             crossOrigin={videoUrl.startsWith("blob:") ? undefined : "anonymous"}
-            data-setup="{}"
             onDoubleClick={(e) => e.preventDefault()}
-          >
-            <source src={videoUrl} type="video/mp4" />
-          </video>
+            key={videoUrl}
+          />
         </div>
       </div>
       <canvas ref={canvasRef} className="hidden" />

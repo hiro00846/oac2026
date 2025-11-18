@@ -13,6 +13,7 @@ export default function VideoSnapPage() {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
   const [seekTo, setSeekTo] = useState<number | null>(null)
   const [videoFileName, setVideoFileName] = useState<string>('')
+  const [isDragging, setIsDragging] = useState(false)
 
   const handleVideoLoad = (url: string, id: string, sourceType: VideoSourceType, fileName?: string) => {
     // 古いBlob URLをクリーンアップ
@@ -27,6 +28,52 @@ export default function VideoSnapPage() {
     // 既存のスナップショットを読み込む（YouTubeの場合はスキップ）
     if (sourceType !== 'youtube') {
       loadSnapshots(id)
+    }
+  }
+
+  // ファイル処理の共通関数
+  const handleFile = (file: File) => {
+    // 動画ファイルかチェック
+    if (!file.type.startsWith('video/')) {
+      alert('動画ファイルを選択してください')
+      return
+    }
+
+    // サーバーにアップロードせず、直接Blob URLを作成して再生
+    const blobUrl = URL.createObjectURL(file)
+    const id = `file-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`
+    handleVideoLoad(blobUrl, id, 'file', file.name)
+  }
+
+  // 動画ファイル選択時の処理
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      handleFile(file)
+    }
+  }
+
+  // ドラッグ＆ドロップ処理
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      handleFile(file)
     }
   }
 
@@ -119,17 +166,68 @@ export default function VideoSnapPage() {
       <Header onVideoLoad={handleVideoLoad} />
       <div className="flex flex-1 overflow-hidden">
         <main className="flex-1 p-4 overflow-hidden flex flex-col">
-          <VideoPlayer
-            videoUrl={videoUrl}
-            videoId={videoId}
-            videoSourceType={videoSourceType}
-            onSnapshot={handleSnapshot}
-            existingTimes={snapshots
-              .filter((s) => !s.snapshotId.startsWith('temp-'))
-              .map((s) => s.time)}
-            seekTo={seekTo}
-            onSeekComplete={() => setSeekTo(null)}
-          />
+          {videoUrl ? (
+            <div
+              className="h-full"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <VideoPlayer
+                videoUrl={videoUrl}
+                videoId={videoId}
+                videoSourceType={videoSourceType}
+                onSnapshot={handleSnapshot}
+                existingTimes={snapshots
+                  .filter((s) => !s.snapshotId.startsWith('temp-'))
+                  .map((s) => s.time)}
+                seekTo={seekTo}
+                onSeekComplete={() => setSeekTo(null)}
+              />
+            </div>
+          ) : (
+            <div
+              className={`h-full bg-white rounded-lg shadow-md border-2 border-dashed transition-colors flex items-center justify-center ${
+                isDragging
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <div className="flex flex-col items-center gap-4 p-8">
+                <svg
+                  className="w-16 h-16 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  />
+                </svg>
+                <div className="text-center">
+                  <p className="text-lg font-medium text-gray-700 mb-2">
+                    動画をドラッグ＆ドロップ
+                  </p>
+                  <p className="text-sm text-gray-500 mb-4">または</p>
+                  <label className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded cursor-pointer transition-colors">
+                    ファイルを選択
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
         <Sidebar
           snapshots={snapshots}
