@@ -78,14 +78,28 @@ export default function VideoSnapPage() {
   }
 
   const loadSnapshots = async (id: string) => {
+    // ファイルベースの動画で、まだバックエンドに保存されていない場合はスキップ
+    if (id.startsWith('file-')) {
+      // ファイルベースの動画は、まだバックエンドに保存されていない可能性があるため
+      // エラーを無視して空の配列を設定
+      setSnapshots([])
+      return
+    }
+
     try {
       const response = await fetch(`http://localhost:3001/api/video/${id}/snapshots`)
       if (response.ok) {
         const data = await response.json()
         setSnapshots(data)
+      } else if (response.status === 404) {
+        // 動画IDが存在しない場合は空の配列を設定
+        setSnapshots([])
       }
     } catch (error) {
-      console.error('Failed to load snapshots:', error)
+      // バックエンドが起動していない場合やネットワークエラーの場合
+      // エラーをログに記録するが、アプリケーションの動作は継続
+      console.warn('Failed to load snapshots (backend may not be running):', error)
+      setSnapshots([])
     }
   }
 
@@ -102,10 +116,9 @@ export default function VideoSnapPage() {
       return 0
     }
 
-    // 0.3秒以内のスナップショットが既に存在するかチェック
+    // 0.3秒以内のスナップショットが既に存在するかチェック（すべてのスナップショットをチェック）
     const snapshotSeconds = timeToSeconds(snapshot.time)
     const hasNearTime = snapshots.some((s) => {
-      if (s.snapshotId.startsWith('temp-')) return false
       const existingSeconds = timeToSeconds(s.time)
       return Math.abs(snapshotSeconds - existingSeconds) <= 0.3
     })
@@ -116,31 +129,92 @@ export default function VideoSnapPage() {
       return
     }
 
-    // 一時的なスナップショットの場合は置き換え、そうでなければ追加
+    // 一時的なスナップショットの場合は、そのまま追加（既存の一時的なスナップショットは保持）
     if (snapshot.snapshotId.startsWith('temp-')) {
       setSnapshots((prev) => {
-        const filtered = prev.filter((s) => !s.snapshotId.startsWith('temp-'))
-        return [snapshot, ...filtered]
+        // 既存のスナップショットを保持し、新しい一時的なスナップショットを先頭に追加
+        return [snapshot, ...prev]
       })
     } else {
+      // 実際のスナップショットの場合は、対応する一時的なスナップショットを置き換え
       setSnapshots((prev) => {
-        // 既存の一時的なスナップショットを削除してから追加
-        const filtered = prev.filter((s) => !s.snapshotId.startsWith('temp-'))
-        return [snapshot, ...filtered]
+        // 同じsnapshotIdが既に存在する場合は更新
+        const existingIndex = prev.findIndex((s) => s.snapshotId === snapshot.snapshotId)
+        if (existingIndex >= 0) {
+          const updated = [...prev]
+          updated[existingIndex] = snapshot
+          return updated
+        } else {
+          // 対応する一時的なスナップショット（同じ時間のもの）を探して置き換え
+          const tempIndex = prev.findIndex((s) => 
+            s.snapshotId.startsWith('temp-') && s.time === snapshot.time
+          )
+          if (tempIndex >= 0) {
+            // 一時的なスナップショットを実際のものに置き換え
+            const updated = [...prev]
+            updated[tempIndex] = snapshot
+            return updated
+          } else {
+            // 対応する一時的なスナップショットがない場合は、新しいスナップショットを追加
+            return [snapshot, ...prev]
+          }
+        }
       })
     }
   }
 
   const handleDeleteSnapshot = async (snapshotId: string) => {
+    // 一時的なスナップショット（temp-で始まる）の場合は、バックエンドAPIを呼ばずに直接削除
+    if (snapshotId.startsWith('temp-')) {
+      setSnapshots((prev) => {
+        const snapshot = prev.find((s) => s.snapshotId === snapshotId)
+        // Blob URLをクリーンアップ
+        if (snapshot?.blobUrl) {
+          URL.revokeObjectURL(snapshot.blobUrl)
+        }
+        return prev.filter((s) => s.snapshotId !== snapshotId)
+      })
+      return
+    }
+
+    // 実際のスナップショットの場合は、バックエンドAPIを呼び出して削除
     try {
       const response = await fetch(`http://localhost:3001/api/snapshot/${snapshotId}`, {
         method: 'DELETE',
       })
       if (response.ok) {
-        setSnapshots((prev) => prev.filter((s) => s.snapshotId !== snapshotId))
+        // バックエンドから削除成功した場合、ローカルからも削除
+        setSnapshots((prev) => {
+          const snapshot = prev.find((s) => s.snapshotId === snapshotId)
+          // Blob URLをクリーンアップ
+          if (snapshot?.blobUrl) {
+            URL.revokeObjectURL(snapshot.blobUrl)
+          }
+          return prev.filter((s) => s.snapshotId !== snapshotId)
+        })
+      } else {
+        // バックエンドエラーの場合でも、ローカルからは削除（オフライン対応）
+        console.warn('Failed to delete snapshot from backend (status:', response.status, '), removing from local state')
+        setSnapshots((prev) => {
+          const snapshot = prev.find((s) => s.snapshotId === snapshotId)
+          // Blob URLをクリーンアップ
+          if (snapshot?.blobUrl) {
+            URL.revokeObjectURL(snapshot.blobUrl)
+          }
+          return prev.filter((s) => s.snapshotId !== snapshotId)
+        })
       }
     } catch (error) {
-      console.error('Failed to delete snapshot:', error)
+      // ネットワークエラーの場合でも、ローカルからは削除（オフライン対応）
+      console.warn('Failed to delete snapshot (backend may not be running), removing from local state:', error)
+      setSnapshots((prev) => {
+        const snapshot = prev.find((s) => s.snapshotId === snapshotId)
+        // Blob URLをクリーンアップ
+        if (snapshot?.blobUrl) {
+          URL.revokeObjectURL(snapshot.blobUrl)
+        }
+        return prev.filter((s) => s.snapshotId !== snapshotId)
+      })
     }
   }
 

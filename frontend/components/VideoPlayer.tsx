@@ -28,68 +28,109 @@ export default function VideoPlayer({
   const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [currentTime, setCurrentTime] = useState<string>("00:00:00");
+  const [useVideoJS, setUseVideoJS] = useState<boolean>(true);
 
   useEffect(() => {
     if (!videoRef.current || !videoUrl) return;
 
-    // 既存のプレイヤーがある場合は破棄
-    if (playerRef.current) {
-      playerRef.current.dispose();
-      playerRef.current = null;
-    }
-
-    // Blob URLの場合はcrossOriginは不要、通常のURLの場合は設定
-    if (videoRef.current && !videoUrl.startsWith("blob:")) {
-      videoRef.current.crossOrigin = "anonymous";
-    } else if (videoRef.current && videoUrl.startsWith("blob:")) {
-      videoRef.current.crossOrigin = null;
-    }
-
-    // video.jsプレイヤーを初期化
-    playerRef.current = videojs(videoRef.current, {
-      controls: true,
-      responsive: true,
-      fluid: false,
-      aspectRatio: "16:9",
-      crossorigin: videoUrl.startsWith("blob:") ? undefined : "anonymous",
-      userActions: {
-        hotkeys: false,
-        doubleClick: false,
-      },
-      pictureInPicture: {
-        ui: false,
-      },
-      sources: [
-        {
-          src: videoUrl,
-        },
-      ],
-    });
-
-    // タイムコード更新のイベントリスナー
-    playerRef.current.on("timeupdate", () => {
-      const time = playerRef.current?.currentTime() || 0;
-      setCurrentTime(formatTime(time));
-    });
-
-    // クリーンアップ
-    return () => {
+    // Blob URLの場合はVideoJSを使わずに通常のHTML5 video要素を使用
+    if (videoUrl.startsWith("blob:")) {
+      setUseVideoJS(false);
+      
+      // 既存のプレイヤーがある場合は破棄
       if (playerRef.current) {
         playerRef.current.dispose();
         playerRef.current = null;
       }
-    };
+
+      // 通常のvideo要素として設定
+      const video = videoRef.current;
+      video.crossOrigin = null;
+      video.src = videoUrl;
+      video.controls = true;
+      video.playsInline = true;
+
+      // タイムコード更新のイベントリスナー
+      const handleTimeUpdate = () => {
+        const time = video.currentTime || 0;
+        setCurrentTime(formatTime(time));
+      };
+      video.addEventListener("timeupdate", handleTimeUpdate);
+
+      // クリーンアップ
+      return () => {
+        video.removeEventListener("timeupdate", handleTimeUpdate);
+      };
+    } else {
+      // 通常のURLの場合はVideoJSを使用
+      setUseVideoJS(true);
+
+      // 既存のプレイヤーがある場合は破棄
+      if (playerRef.current) {
+        playerRef.current.dispose();
+        playerRef.current = null;
+      }
+
+      // crossOriginを設定
+      if (videoRef.current) {
+        videoRef.current.crossOrigin = "anonymous";
+      }
+
+      // video.jsプレイヤーを初期化
+      const playerOptions: any = {
+        controls: true,
+        responsive: true,
+        fluid: false,
+        aspectRatio: "16:9",
+        crossorigin: "anonymous",
+        userActions: {
+          hotkeys: false,
+          doubleClick: false,
+        },
+        pictureInPicture: {
+          ui: false,
+        },
+        sources: [
+          {
+            src: videoUrl,
+          },
+        ],
+      };
+
+      playerRef.current = videojs(videoRef.current, playerOptions);
+
+      // タイムコード更新のイベントリスナー
+      playerRef.current.on("timeupdate", () => {
+        const time = playerRef.current?.currentTime() || 0;
+        setCurrentTime(formatTime(time));
+      });
+
+      // クリーンアップ
+      return () => {
+        if (playerRef.current) {
+          playerRef.current.dispose();
+          playerRef.current = null;
+        }
+      };
+    }
   }, [videoUrl]);
 
   // seekToが変更されたら動画の再生位置を変更
   useEffect(() => {
-    if (seekTo !== null && seekTo !== undefined && playerRef.current) {
-      playerRef.current.currentTime(seekTo);
-      if (onSeekComplete) {
-        onSeekComplete();
+    if (seekTo !== null && seekTo !== undefined) {
+      if (useVideoJS && playerRef.current) {
+        playerRef.current.currentTime(seekTo);
+        if (onSeekComplete) {
+          onSeekComplete();
+        }
+      } else if (!useVideoJS && videoRef.current) {
+        videoRef.current.currentTime = seekTo;
+        if (onSeekComplete) {
+          onSeekComplete();
+        }
       }
     }
-  }, [seekTo, onSeekComplete]);
+  }, [seekTo, onSeekComplete, useVideoJS]);
 
   const formatTime = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -103,15 +144,8 @@ export default function VideoPlayer({
   };
 
   const handleSnap = async () => {
-    if (
-      !playerRef.current ||
-      !videoId ||
-      !canvasRef.current ||
-      !videoRef.current
-    )
-      return;
+    if (!videoId || !canvasRef.current || !videoRef.current) return;
 
-    const player = playerRef.current;
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
@@ -131,7 +165,10 @@ export default function VideoPlayer({
       async (blob) => {
         if (!blob) return;
 
-        const currentTime = player.currentTime() || 0;
+        // VideoJSを使っている場合はplayerRefから、そうでない場合はvideo要素から現在時刻を取得
+        const currentTime = useVideoJS && playerRef.current
+          ? playerRef.current.currentTime() || 0
+          : video.currentTime || 0;
         const timeString = formatTime(currentTime);
 
         // タイムスタンプを秒数に変換（HH:MM:SS.S形式に対応）
@@ -199,10 +236,14 @@ export default function VideoPlayer({
             // 一時的なスナップショットを実際のものに置き換え
             onSnapshot(actualSnapshot);
           } else {
-            console.error("Failed to save snapshot");
+            // バックエンドエラーの場合でも、一時的なスナップショットは保持
+            console.warn("Failed to save snapshot to backend (status:", response.status, ")");
+            // 一時的なスナップショットは既に表示されているので、そのまま保持
           }
         } catch (error) {
-          console.error("Error saving snapshot:", error);
+          // ネットワークエラーの場合でも、一時的なスナップショットは保持
+          console.warn("Error saving snapshot (backend may not be running):", error);
+          // 一時的なスナップショットは既に表示されているので、そのまま保持
         }
       },
       "image/jpeg",
@@ -299,11 +340,12 @@ export default function VideoPlayer({
         >
           <video
             ref={videoRef}
-            className="video-js vjs-big-play-centered"
+            className={useVideoJS ? "video-js vjs-big-play-centered" : ""}
             playsInline
             crossOrigin={videoUrl.startsWith("blob:") ? undefined : "anonymous"}
             onDoubleClick={(e) => e.preventDefault()}
             key={videoUrl}
+            style={useVideoJS ? {} : { width: "100%", height: "100%" }}
           />
         </div>
       </div>
